@@ -92,15 +92,7 @@ JNIEXPORT jint JNICALL jni_um_vdec_fini(JNIEnv * env, jobject obj)
 }
 
 
-
-
-
-
-
 static const char *classPathName = "com/example/mediacodecdemo/MainActivity";
-
-
-
 
 static JNINativeMethod methods[] = {
 				{"um_vdec_init",		"(III)I",	(void*)jni_um_vdec_init},

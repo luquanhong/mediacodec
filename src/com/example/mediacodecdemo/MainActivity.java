@@ -45,7 +45,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 	private PlayerThread mPlayerThread = null;
 	
 	
-	private boolean isSDK = true;
+	private boolean isSDK = false;
 	ByteBuffer[] inputBuffers;
 	ByteBuffer[] outputBuffers;
 	

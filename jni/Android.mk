@@ -16,9 +16,9 @@ LOCAL_MODULE_TAGS := tests
 
 LOCAL_SHARED_LIBRARIES := \
 
-
+#mediacodec.c 
 LOCAL_SRC_FILES := \
-    	mediacodec.c \
+    	MediaCodecJava.cpp \
     	media-jni.cpp
 
 
@@ -26,7 +26,7 @@ LOCAL_CFLAGS := 	\
 	-I$(PROJECT_ROOT)include	
 	
 
-LOCAL_CXXFLAGS := -DENABLE_LOG
+LOCAL_CXXFLAGS := -DENABLE_LOG -pthread
 
 
 include $(BUILD_SHARED_LIBRARY)
