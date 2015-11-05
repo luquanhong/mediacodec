@@ -45,6 +45,11 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 	private PlayerThread mPlayerThread = null;
 	
 	
+	private boolean isSDK = true;
+	ByteBuffer[] inputBuffers;
+	ByteBuffer[] outputBuffers;
+	
+	
 	public native int um_vdec_init(int codec, int width, int height);
 	
 	public native int um_vdec_decode(byte[] buf, int len);
@@ -52,6 +57,8 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 	public native int um_vdec_fini();
 	
 	public native int um_vdec_setSurface();
+	
+	public native int um_vdec_setVideoSurface(Surface surface);
 	
 	static {
 		System.loadLibrary("mediacodec");
@@ -75,8 +82,12 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 			@Override
 			public void onClick(View v) {
 				// TODO Auto-generated method stub
+				if(mPlayerThread.getState() == Thread.State.NEW){//if (thread.getState() == Thread.State.NEW)
+					mPlayerThread.start();
+				} else {
+					mPlayerThread.run();
+				}
 				
-				mPlayerThread.start();
 			}
 
 		});
@@ -121,7 +132,8 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 		
 		mSurface = holder.getSurface();
 		
-		um_vdec_setSurface();
+		//um_vdec_setSurface();
+		um_vdec_setVideoSurface(mSurface);
 		mPlayerThread = new PlayerThread( mSurface);
 		
 		
@@ -153,32 +165,39 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 		
 		
 		PlayerThread(Surface surface){
-			
-			um_vdec_init(1, 800, 480);
-			
-			
-//			MediaFormat format = MediaFormat.createVideoFormat(mMime, mWidth, mHeight);
-//			format.setInteger(MediaFormat.KEY_BIT_RATE, 100000);
-//			format.setInteger(MediaFormat.KEY_FRAME_RATE, 15);
-//			
-//			format.setInteger(MediaFormat.KEY_COLOR_FORMAT,
-//						MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar);
-//					
-//			String mime = format.getString(MediaFormat.KEY_MIME);
-//			format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 5);  
-//			
-//			codec = MediaCodec.createDecoderByType(mime);
-//			
-//			Log.e(TAG, " create decode by type mime " + mime);
-//			
-//			if(codec == null){
-//				
-//				Log.e(TAG, " create decode by type fail");
-//				return;
-//			}
-//			
-//			codec.configure(format, surface, null, 0);
-//			codec.start();
+
+			if(isSDK == false){			
+						um_vdec_init(1, 800, 480);
+			}else {
+				
+				MediaFormat format = MediaFormat.createVideoFormat(mMime, mWidth, mHeight);
+				format.setInteger(MediaFormat.KEY_BIT_RATE, 100000);
+				format.setInteger(MediaFormat.KEY_FRAME_RATE, 15);
+				
+				format.setInteger(MediaFormat.KEY_COLOR_FORMAT,
+							MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar);
+						
+				String mime = format.getString(MediaFormat.KEY_MIME);
+				format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 5);  
+				
+				try {
+					codec = MediaCodec.createDecoderByType(mime);
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				
+				Log.e(TAG, " create decode by type mime " + mime);
+				
+				if(codec == null){
+					
+					Log.e(TAG, " create decode by type fail");
+					return;
+				}
+				
+				codec.configure(format, surface, null, 0);
+				codec.start();
+			}
 			
 		}
 		
@@ -187,15 +206,19 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 			
 			
 			InputStream fileIS = null;
-//			ByteBuffer[] inputBuffers = codec.getInputBuffers();
-//			ByteBuffer[] outputBuffers = codec.getOutputBuffers();
+			if(isSDK == false){		
+			
+			}else {
+			
+				inputBuffers = codec.getInputBuffers();
+				outputBuffers = codec.getOutputBuffers();
+			}
 			
 			byte[] bLen = new byte[4];
 			byte[] bFrame = new byte[40960];
 			int frameLen = 0;
 			
 			
-			//fileIS = new FileInputStream("/mnt/sdcard/predecode.h264");
 			try {
 				
 				fileIS = getResources().getAssets().open("predecode.h264");
@@ -220,6 +243,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 						Log.e(TAG, "release Thread.currentThread().interrupt()");
 						Thread.currentThread().interrupt();
 						run = false;
+						break;
 					}
 					
 					bytes = fileIS.read(bLen, 0, 4);
@@ -229,51 +253,53 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 					Log.e(TAG,"bytesRead " + bytes);
 				
 				
-				
 					try {
 						Thread.sleep(5);
 					} catch (InterruptedException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
-				
-					um_vdec_decode(bFrame, frameLen);
+					if(isSDK == false){		
+						um_vdec_decode(bFrame, frameLen);
 					
-//					if(bytes > 0){
-//						
-//						int inputBufferIndex = codec.dequeueInputBuffer(0);
-//						
-//						if(inputBufferIndex >= 0){
-//							
-//							ByteBuffer inputeBuffer = inputBuffers[inputBufferIndex];
-//							inputeBuffer.clear();
-//							inputeBuffer.put(bFrame, 0, frameLen);
-//							
-//							codec.queueInputBuffer(inputBufferIndex, 0, frameLen, 0, 0);
-//						}
-//						
-//						BufferInfo info = new BufferInfo();
-//						
-//						int outputBufferIndex = codec.dequeueOutputBuffer(info, 0);
-//						
-//						if(outputBufferIndex >= 0){
-//							
-//							Log.e(TAG, "codec outputBufferIndex" + outputBufferIndex);
-//							codec.releaseOutputBuffer(outputBufferIndex, true);
-//							outputBufferIndex = codec.dequeueOutputBuffer(info, 0);
-//						}else if (outputBufferIndex == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) {
-//							
-//							Log.e(TAG, "codec INFO_OUTPUT_BUFFERS_CHANGED");
-//							outputBuffers = codec.getOutputBuffers();
-//						} else if (outputBufferIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-//						    
-//							Log.e(TAG, "codec INFO_OUTPUT_FORMAT_CHANGED");
-//							// Subsequent data will conform to new format.
-//						    MediaFormat format = codec.getOutputFormat();
-//						    
-//						 }
-//						
-//					}
+					}else {				
+					
+						if(bytes > 0){
+							
+							int inputBufferIndex = codec.dequeueInputBuffer(0);
+							
+							if(inputBufferIndex >= 0){
+								
+								ByteBuffer inputeBuffer = inputBuffers[inputBufferIndex];
+								inputeBuffer.clear();
+								inputeBuffer.put(bFrame, 0, frameLen);
+								
+								codec.queueInputBuffer(inputBufferIndex, 0, frameLen, 0, 0);
+							}
+							
+							BufferInfo info = new BufferInfo();
+							
+							int outputBufferIndex = codec.dequeueOutputBuffer(info, 0);
+							
+							if(outputBufferIndex >= 0){
+								
+								Log.e(TAG, "codec outputBufferIndex" + outputBufferIndex);
+								codec.releaseOutputBuffer(outputBufferIndex, true);
+								outputBufferIndex = codec.dequeueOutputBuffer(info, 0);
+							}else if (outputBufferIndex == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) {
+								
+								Log.e(TAG, "codec INFO_OUTPUT_BUFFERS_CHANGED");
+								outputBuffers = codec.getOutputBuffers();
+							} else if (outputBufferIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+							    
+								Log.e(TAG, "codec INFO_OUTPUT_FORMAT_CHANGED");
+								// Subsequent data will conform to new format.
+							    MediaFormat format = codec.getOutputFormat();
+							    
+							 }
+							
+						}
+					}
 					
 				} catch (IOException e) {
 					// TODO Auto-generated catch block
@@ -289,12 +315,15 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 					fileIS.close();
 				}
 				
-				um_vdec_fini();
+				if(isSDK == false){		
+					um_vdec_fini();
 				
-				Log.e(TAG, "release codec");
-				codec.stop();
-				codec.release();
-				codec = null;
+				}else {		
+					Log.e(TAG, "release codec");
+					codec.stop();
+					codec.release();
+					codec = null;
+				}
 				
 			} catch (IOException e) {
 				e.printStackTrace();

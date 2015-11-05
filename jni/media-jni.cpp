@@ -46,6 +46,14 @@ JNIEXPORT jint JNICALL jni_um_vdec_setSurface(JNIEnv * env, jobject obj)
 	return -1;
 }
 
+
+JNIEXPORT jint JNICALL jni_um_vdec_setVideoSurface(JNIEnv *env, jobject obj, jobject jsurface)
+{
+	vout_android_java_surf = env->NewGlobalRef( jsurface);
+
+	return 0;
+}
+
 /*!
 *	\brief	simple interface invoke without implement
 */
@@ -99,6 +107,7 @@ static JNINativeMethod methods[] = {
 				{"um_vdec_decode",		"([BI)I",					(void*)jni_um_vdec_decode},
 				{"um_vdec_fini",		"()I",						(void*)jni_um_vdec_fini},
 				{"um_vdec_setSurface",	"()I",						(void*)jni_um_vdec_setSurface},
+				{ "um_vdec_setVideoSurface",       "(Landroid/view/Surface;)I", (void *) jni_um_vdec_setVideoSurface },
 };
 
 
