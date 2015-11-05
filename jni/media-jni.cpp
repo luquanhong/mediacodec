@@ -19,33 +19,6 @@ JavaVM *myVm;
 
 jobject vout_android_java_surf;
 
-/*!
-*	\brief	relationship surface with native window,the surface is passed from java
-*/
-JNIEXPORT jint JNICALL jni_um_vdec_setSurface(JNIEnv * env, jobject obj)
-{
-	LOGE("Hello jni_um_video_surface_set!");
-
-	jclass surfaceClass = env->FindClass( "android/view/Surface");	//!< get java class instance from system class
-
-	if (surfaceClass == NULL) {
-		LOGE("Can't find android/view/Surface");
-		return -1;
-	}
-
-	if(0){
-		fields.surface_native = env->GetFieldID( surfaceClass, "mNativeSurface", "I");	//!< get the no of mNativeSurface var in the system
-	}else{
-		 fields.surface_native = env->GetFieldID( surfaceClass, "mNativeObject", "I");
-	}
-
-	jobject surface = env->GetObjectField( obj, fields.surface);
-
-	vout_android_java_surf = env->NewGlobalRef( surface);
-
-	return -1;
-}
-
 
 JNIEXPORT jint JNICALL jni_um_vdec_setVideoSurface(JNIEnv *env, jobject obj, jobject jsurface)
 {
@@ -98,8 +71,7 @@ static JNINativeMethod methods[] = {
 				{"um_vdec_init",		"(III)I",	(void*)jni_um_vdec_init},
 				{"um_vdec_decode",		"([BI)I",					(void*)jni_um_vdec_decode},
 				{"um_vdec_fini",		"()I",						(void*)jni_um_vdec_fini},
-				{"um_vdec_setSurface",	"()I",						(void*)jni_um_vdec_setSurface},
-				{ "um_vdec_setVideoSurface",       "(Landroid/view/Surface;)I", (void *) jni_um_vdec_setVideoSurface },
+				{"um_vdec_setVideoSurface",       "(Landroid/view/Surface;)I", (void *) jni_um_vdec_setVideoSurface},
 };
 
 

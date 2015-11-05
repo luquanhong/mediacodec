@@ -162,7 +162,7 @@ struct jfields
     jmethodID get_codec_count, get_codec_info_at, is_encoder, get_capabilities_for_type;
     jfieldID profile_levels_field, profile_field, level_field;
     jmethodID get_supported_types, get_name;
-    jmethodID create_by_codec_name, configure, start, stop, flush, release;
+    jmethodID create_by_codec_name, create_by_codec_type, configure, start, stop, flush, release;
     jmethodID get_output_format;
     jmethodID get_input_buffers, get_input_buffer;
     jmethodID get_output_buffers, get_output_buffer;
@@ -198,6 +198,9 @@ static const struct classname classes[] = {
     { NULL, 0 },
 };
 
+//IJK_FIND_JAVA_STATIC_METHOD(env, g_clazz.jmid_createDecoderByType,
+//				g_clazz.clazz,"createDecoderByType",  "(Ljava/lang/String;)Landroid/media/MediaCodec;");
+
 struct member
 {
     const char *name;
@@ -223,6 +226,7 @@ static const struct member members[] = {
     { "level", "I", "android/media/MediaCodecInfo$CodecProfileLevel", OFF(level_field), FIELD, true },
 
     { "createByCodecName", "(Ljava/lang/String;)Landroid/media/MediaCodec;", "android/media/MediaCodec", OFF(create_by_codec_name), STATIC_METHOD, true },
+	{ "createDecoderByType", "(Ljava/lang/String;)Landroid/media/MediaCodec;", "android/media/MediaCodec", OFF(create_by_codec_type), STATIC_METHOD, true },
     { "configure", "(Landroid/media/MediaFormat;Landroid/view/Surface;Landroid/media/MediaCrypto;I)V", "android/media/MediaCodec", OFF(configure), METHOD, true },
     { "start", "()V", "android/media/MediaCodec", OFF(start), METHOD, true },
     { "stop", "()V", "android/media/MediaCodec", OFF(stop), METHOD, true },
@@ -578,7 +582,13 @@ static int Start( const char *psz_name, const char *psz_mime)
     jobject joutput_buffers = NULL;
     jobject jbuffer_info = NULL;
     jobject jsurface = NULL;
+    jstring jbitrate_string = NULL;
+    jstring jframerate_string = NULL;
 
+    jstring jcolorformat_string = NULL;
+
+
+    jstring jiframe_string = NULL;
 //    GET_ENV();
     JNIEnv *env;
 	if (JNI_OK != SDL_JNI_SetupThreadEnv(&env)) {
@@ -594,9 +604,14 @@ static int Start( const char *psz_name, const char *psz_mime)
     /* This method doesn't handle errors nicely, it crashes if the codec isn't
      * found.  (The same goes for createDecoderByType.) This is fixed in latest
      * AOSP and in 4.2, but not in 4.1 devices. */
+//    jcodec = env->CallStaticObjectMethod(jfields.media_codec_class,
+//                                            jfields.create_by_codec_name,
+//                                            jcodec_name);
     jcodec = env->CallStaticObjectMethod(jfields.media_codec_class,
-                                            jfields.create_by_codec_name,
-                                            jcodec_name);
+                                            jfields.create_by_codec_type,
+											jmime);
+
+
     if (CHECK_EXCEPTION())
     {
     	ALOGE( "Exception occurred in MediaCodec.createByCodecName");
@@ -633,8 +648,34 @@ static int Start( const char *psz_name, const char *psz_mime)
 
     /* No limits for input size */
     jmaxinputsize_string = env->NewStringUTF( "max-input-size");
-    env->CallVoidMethod( jformat, jfields.set_integer,
-                           jmaxinputsize_string, 0);
+    env->CallVoidMethod( jformat, jfields.set_integer,jmaxinputsize_string, 0);
+
+
+
+     jbitrate_string = NULL;
+    jbitrate_string = env->NewStringUTF( "bitrate");
+    env->CallVoidMethod( jformat, jfields.set_integer, jbitrate_string, 100000);
+
+     jframerate_string = NULL;
+    jframerate_string = env->NewStringUTF( "frame-rate");
+	env->CallVoidMethod( jformat, jfields.set_integer, jframerate_string, 15);
+
+	 jcolorformat_string = NULL;
+	jcolorformat_string = env->NewStringUTF( "color-format");
+	env->CallVoidMethod( jformat, jfields.set_integer, jcolorformat_string, 21);
+
+	 jiframe_string = NULL;
+	jiframe_string = env->NewStringUTF( "i-frame-interval");
+	env->CallVoidMethod( jformat, jfields.set_integer, jiframe_string, 5);
+
+//    format.setInteger(MediaFormat.KEY_BIT_RATE, 100000);
+//	format.setInteger(MediaFormat.KEY_FRAME_RATE, 15);
+//
+//	format.setInteger(MediaFormat.KEY_COLOR_FORMAT,
+//				MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar);
+//
+//	String mime = format.getString(MediaFormat.KEY_MIME);
+//	format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 5);
 
 //    if (b_direct_rendering)
 //    {
@@ -797,14 +838,16 @@ static int QueueInput(int i_index, const void *p_buf,
   		  return -1;
   	}
 
+    ALOGE("QueueInput enter");
+
     //assert(i_index >= 0);
 
 //    GET_ENV();
 
-    if (jfields.get_input_buffers)
+    if (jfields.get_input_buffers){
+    	ALOGE("QueueInput enter 1");
         j_mc_buf = env->GetObjectArrayElement((jobjectArray)p_sys->input_buffers, i_index);
-    else
-    {
+    } else {
         j_mc_buf = env->CallObjectMethod( p_sys->codec,
                                             jfields.get_input_buffer, i_index);
         if (CHECK_EXCEPTION())
@@ -824,18 +867,21 @@ static int QueueInput(int i_index, const void *p_buf,
 
     if ((size_t) j_mc_size > i_size)
         j_mc_size = i_size;
-
+    ALOGE("QueueInput enter 2");
     memcpy(p_mc_buf, p_buf, j_mc_size);
 
     env->CallVoidMethod(p_sys->codec, jfields.queue_input_buffer,
                            i_index, 0, j_mc_size, i_ts, jflags);
+
+    ALOGE("QueueInput enter 3");
     env->DeleteLocalRef(j_mc_buf);
+    ALOGE("QueueInput enter 4");
     if (CHECK_EXCEPTION())
     {
     	 ALOGE("Exception in MediaCodec.queueInputBuffer");
         return MC_API_ERROR;
     }
-
+    ALOGE("QueueInput enter 5");
     return 0;
 }
 
@@ -849,16 +895,16 @@ static int DequeueOutput(long long i_timeout)
     int i_index;
 
 //    GET_ENV();
-
+    ALOGE( "%s:  1", __func__);
     JNIEnv *env;
 
     if (JNI_OK != SDL_JNI_SetupThreadEnv(&env)) {
 		  ALOGE( "%s: SetupThreadEnv failed", __func__);
 		  return -1;
 	}
-
-    i_index = env->CallIntMethod(p_sys->codec,jfields.dequeue_output_buffer,
-                                    p_sys->buffer_info, 100);
+    ALOGE( "%s:  2", __func__);
+    i_index = env->CallIntMethod(p_sys->codec, jfields.dequeue_output_buffer,
+                                    p_sys->buffer_info, 1000);
     if (CHECK_EXCEPTION())
     {
         ALOGE( "Exception in MediaCodec.dequeueOutputBuffer");
@@ -1038,12 +1084,14 @@ static int ReleaseOutput( int i_index, bool b_render)
 extern "C" int um_vdec_decode(char* buffer, int len)
 {
 
-	 JNIEnv *env;
+	JNIEnv *env;
 	if (JNI_OK != SDL_JNI_SetupThreadEnv(&env)) {
 			ALOGE( "%s: SetupThreadEnv failed", __func__);
 			return -1;
 	 }
 	ALOGE("Hello jni_um_vdec_decode!");
+
+	DequeueOutput(0);
 
 	int inputBufferIndex = DequeueInput(0);
 	ALOGE("Hello jni_um_vdec_decode! inputBufferIndex = %d", inputBufferIndex);

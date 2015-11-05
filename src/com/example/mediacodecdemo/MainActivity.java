@@ -132,7 +132,6 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 		
 		mSurface = holder.getSurface();
 		
-		//um_vdec_setSurface();
 		um_vdec_setVideoSurface(mSurface);
 		mPlayerThread = new PlayerThread( mSurface);
 		
