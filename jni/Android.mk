@@ -19,7 +19,8 @@ LOCAL_SHARED_LIBRARIES := \
 #mediacodec.c 
 LOCAL_SRC_FILES := \
     	MediaCodecJava.cpp \
-    	media-jni.cpp
+    	media-jni.cpp \
+    	ijksdl_mutex.c
 
 
 LOCAL_CFLAGS := 	\

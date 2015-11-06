@@ -9,6 +9,17 @@
 #include<pthread.h>
 
 #include <android/log.h>
+#include "ijksdl_mutex.h"
+
+
+typedef struct SDL_AMediaCodecBufferInfo {
+    int32_t offset;
+    int32_t size;
+    int64_t presentationTimeUs;
+    uint32_t flags;
+} SDL_AMediaCodecBufferInfo;
+
+typedef struct SDL_AMediaCodecBufferInfo SDL_AMediaCodecBufferInfo;
 
 #define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR  , "TestCase", __VA_ARGS__)
 
@@ -373,6 +384,13 @@ struct mc_api_sys
    	int i_height;
    	int i_codec;
    	int i;
+
+   	bool acodec_first_dequeue_output_request;
+    SDL_mutex                *acodec_first_dequeue_output_mutex;
+    SDL_cond                 *acodec_first_dequeue_output_cond;
+
+    SDL_mutex                *acodec_mutex;
+    SDL_cond                 *acodec_cond;
 };
 
 struct mc_api_sys* p_sys;
@@ -1092,6 +1110,12 @@ extern "C" int um_vdec_decode(char* buffer, int len)
 	 }
 	ALOGE("Hello jni_um_vdec_decode!");
 
+	SDL_LockMutex(p_sys->acodec_first_dequeue_output_mutex);
+	while (p_sys->acodec_first_dequeue_output_request) {
+		SDL_CondWaitTimeout(p_sys->acodec_first_dequeue_output_cond, p_sys->acodec_first_dequeue_output_mutex, 1000);
+	}
+	SDL_UnlockMutex(p_sys->acodec_first_dequeue_output_mutex);
+
 	int inputBufferIndex = DequeueInput(0);
 	ALOGE("Hello jni_um_vdec_decode! inputBufferIndex = %d", inputBufferIndex);
 	if(inputBufferIndex >= 0){
@@ -1215,6 +1239,13 @@ extern "C" int um_vdec_init( int codec, int width, int height)
     p_sys->i_codec = codec;
     p_sys->i = 0;
 
+    p_sys->acodec_first_dequeue_output_request = true;
+    p_sys->acodec_first_dequeue_output_mutex = SDL_CreateMutex();
+    p_sys->acodec_first_dequeue_output_cond  = SDL_CreateCond();
+
+    p_sys->acodec_mutex                      = SDL_CreateMutex();
+    p_sys->acodec_cond                       = SDL_CreateCond();
+
     const char *mime = NULL;
 	size_t fmt_profile = 0;
 
@@ -1238,17 +1269,200 @@ extern "C" int um_vdec_fini()
 {
 	ALOGE("Hello jni_um_vdec_fini!");
 	Stop();
+
+    SDL_DestroyCondP(&p_sys->acodec_first_dequeue_output_cond);
+    SDL_DestroyMutexP(&p_sys->acodec_first_dequeue_output_mutex);
+}
+
+int SDL_AMediaCodec_dequeueOutputBuffer(SDL_AMediaCodecBufferInfo *info, int64_t timeoutUs)
+{
+    ALOGE("%s(%d)", __func__, (int)timeoutUs);
+
+    JNIEnv *env = NULL;
+    if (JNI_OK != SDL_JNI_SetupThreadEnv(&env)) {
+        ALOGE("%s: SetupThreadEnv failed", __func__);
+        return -1;
+    }
+
+    jint idx = -1;
+    while (1) {
+        idx = env->CallIntMethod(p_sys->codec, jfields.dequeue_output_buffer, p_sys->buffer_info, (jlong)timeoutUs);
+        if (SDL_JNI_CatchException(env)) {
+            ALOGE("%s: Exception\n", __func__);
+            return -1;
+        }
+        if (idx == INFO_OUTPUT_BUFFERS_CHANGED) {
+            ALOGE("%s: INFO_OUTPUT_BUFFERS_CHANGED\n", __func__);
+//            SDL_JNI_DeleteGlobalRefP(env, &p_sys->input_buffer_array);
+//            SDL_JNI_DeleteGlobalRefP(env, &p_sys->output_buffer_array);
+            continue;
+        } else if (idx == INFO_OUTPUT_FORMAT_CHANGED) {
+            ALOGE("%s: INFO_OUTPUT_FORMAT_CHANGED\n", __func__);
+        } else if (idx >= 0) {
+           ALOGE("%s: buffer ready (%d) ====================\n", __func__, idx);
+//            if (info) {
+//                info->offset              = (*env)->GetIntField(env, opaque->output_buffer_info, g_clazz_BufferInfo.jfid_offset);
+//                info->size                = (*env)->GetIntField(env, opaque->output_buffer_info, g_clazz_BufferInfo.jfid_size);
+//                info->presentationTimeUs  = (*env)->GetLongField(env, opaque->output_buffer_info, g_clazz_BufferInfo.jfid_presentationTimeUs);
+//                info->flags               = (*env)->GetIntField(env, opaque->output_buffer_info, g_clazz_BufferInfo.jfid_flags);
+//            }
+        }
+        break;
+    }
+
+    return idx;
+}
+
+
+static int drain_output_buffer_l(JNIEnv *env, int64_t timeUs, int *dequeue_count)
+{
+
+    int                    ret      = 0;
+    SDL_AMediaCodecBufferInfo bufferInfo;
+    ssize_t                   output_buffer_index = 0;
+
+    if (dequeue_count)
+        *dequeue_count = 0;
+
+    if (JNI_OK != SDL_JNI_SetupThreadEnv(&env)) {
+        ALOGE("%s:create: SetupThreadEnv failed\n", __func__);
+        return -1;
+    }
+
+    output_buffer_index = SDL_AMediaCodec_dequeueOutputBuffer( &bufferInfo, timeUs);
+    if (output_buffer_index == INFO_OUTPUT_BUFFERS_CHANGED) {
+        ALOGE("INFO_OUTPUT_FORMAT_CHANGED\n");
+        // continue;
+    } else if (output_buffer_index == INFO_OUTPUT_FORMAT_CHANGED) {
+        ALOGE("INFO_OUTPUT_FORMAT_CHANGED\n");
+//        SDL_AMediaFormat_deleteP(&p_sys->output_aformat);
+//        opaque->output_aformat = SDL_AMediaCodec_getOutputFormat(opaque->acodec);
+//        if (opaque->output_aformat) {
+//            int width        = 0;
+//            int height       = 0;
+//            int color_format = 0;
+//            int stride       = 0;
+//            int slice_height = 0;
+//            int crop_left    = 0;
+//            int crop_top     = 0;
+//            int crop_right   = 0;
+//            int crop_bottom  = 0;
+//
+//            SDL_AMediaFormat_getInt32(opaque->output_aformat, "width",          &width);
+//            SDL_AMediaFormat_getInt32(opaque->output_aformat, "height",         &height);
+//            SDL_AMediaFormat_getInt32(opaque->output_aformat, "color-format",   &color_format);
+//
+//            SDL_AMediaFormat_getInt32(opaque->output_aformat, "stride",         &stride);
+//            SDL_AMediaFormat_getInt32(opaque->output_aformat, "slice-height",   &slice_height);
+//            SDL_AMediaFormat_getInt32(opaque->output_aformat, "crop-left",      &crop_left);
+//            SDL_AMediaFormat_getInt32(opaque->output_aformat, "crop-top",       &crop_top);
+//            SDL_AMediaFormat_getInt32(opaque->output_aformat, "crop-right",     &crop_right);
+//            SDL_AMediaFormat_getInt32(opaque->output_aformat, "crop-bottom",    &crop_bottom);
+//
+//            // TI decoder could crash after reconfigure
+//            // ffp_notify_msg3(ffp, FFP_MSG_VIDEO_SIZE_CHANGED, width, height);
+//            // opaque->frame_width  = width;
+//            // opaque->frame_height = height;
+//            ALOGI(
+//                "AMEDIACODEC__INFO_OUTPUT_FORMAT_CHANGED\n"
+//                "    width-height: (%d x %d)\n"
+//                "    color-format: (%s: 0x%x)\n"
+//                "    stride:       (%d)\n"
+//                "    slice-height: (%d)\n"
+//                "    crop:         (%d, %d, %d, %d)\n"
+//                ,
+//                width, height,
+//                SDL_AMediaCodec_getColorFormatName(color_format), color_format,
+//                stride,
+//                slice_height,
+//                crop_left, crop_top, crop_right, crop_bottom);
+//        }
+//        // continue;
+    } else if (output_buffer_index == INFO_TRY_AGAIN_LATER) {
+        ALOGE("AMEDIACODEC__INFO_TRY_AGAIN_LATER\n");
+        // continue;
+    } else if (output_buffer_index < 0) {
+
+    	ALOGE("output_buffer_index < 0\n");
+        // enqueue packet as a fake picture
+//        PacketQueue *fake_q = &opaque->fake_pictq;
+//        SDL_LockMutex(fake_q->mutex);
+//        if (!fake_q->abort_request && fake_q->nb_packets <= 0) {
+//            SDL_CondWaitTimeout(fake_q->cond, fake_q->mutex, 1000);
+//        }
+//        SDL_UnlockMutex(fake_q->mutex);
+//
+//        if (fake_q->abort_request) {
+//            ret = -1;
+//            goto fail;
+//        } else {
+//            AVPacket pkt;
+//            int dequeue_ret = ffp_packet_queue_get(&opaque->fake_pictq, &pkt, 0, &opaque->fake_pictq_serial);
+//            if (dequeue_ret < 0) {
+//                ret = -1;
+//                goto fail;
+//            } else if (dequeue_ret > 0) {
+//                if (!ffp_is_flush_packet(&pkt)) {
+//                    if (dequeue_count)
+//                        ++*dequeue_count;
+//
+//                    ret = amc_queue_picture_fake(node, &pkt);
+//                    av_free_packet(&pkt);
+//                }
+//                ret = 0;
+//                goto fail;
+//            }
+//        }
+    } else if (output_buffer_index >= 0) {
+    	 ReleaseOutput( output_buffer_index, true);
+    }
+
+done:
+    ret = 0;
+fail:
+    return ret;
+}
+
+
+static int drain_output_buffer(JNIEnv *env,  int64_t timeUs, int *dequeue_count)
+{
+
+    SDL_LockMutex(p_sys->acodec_mutex);
+
+//    if (p_sys->acodec_flush_request || p_sys->acodec_reconfigure_request) {
+//        // TODO: invalid picture here?
+//        // let feed_input_buffer() get mutex
+//        SDL_CondWaitTimeout(p_sys->acodec_cond, p_sys->acodec_mutex, 100);
+//    }
+
+    int ret = drain_output_buffer_l(env, timeUs, dequeue_count);
+    SDL_UnlockMutex(p_sys->acodec_mutex);
+    return ret;
 }
 
 extern "C" int um_vdec_render()
 {
-
+	 int                    dequeue_count = 0;
 	JNIEnv *env;
 	if (JNI_OK != SDL_JNI_SetupThreadEnv(&env)) {
 		ALOGE( "%s: SetupThreadEnv failed", __func__);
 		return -1;
 	}
 
+	int64_t timeUs = p_sys->acodec_first_dequeue_output_request ? 0 : 1000000;
+	int ret = drain_output_buffer(env, timeUs, &dequeue_count);
+	if (p_sys->acodec_first_dequeue_output_request) {
+		SDL_LockMutex(p_sys->acodec_first_dequeue_output_mutex);
+		p_sys->acodec_first_dequeue_output_request = false;
+		SDL_CondSignal(p_sys->acodec_first_dequeue_output_cond);
+		SDL_UnlockMutex(p_sys->acodec_first_dequeue_output_mutex);
+	}
+	if (ret != 0) {
+		ALOGE( "============= %s error", __func__);
+	}
+
+
+#if 0
 	ALOGE("Hello jni_um_vdec_render!");
 	int outputBufferIndex = DequeueOutput(0);
 	ALOGE("Hello jni_um_vdec_decode! outputBufferIndex = %d", outputBufferIndex);
@@ -1322,4 +1536,8 @@ extern "C" int um_vdec_render()
 
 		env->DeleteLocalRef(format);
 	 }
+
+#endif
+
+	return 0;
 }
