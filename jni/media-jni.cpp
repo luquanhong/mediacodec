@@ -64,6 +64,19 @@ JNIEXPORT jint JNICALL jni_um_vdec_fini(JNIEnv * env, jobject obj)
 	return 0;
 }
 
+/*!
+*	\brief	simple interface invoke without implement
+*/
+JNIEXPORT jint JNICALL jni_um_vdec_render(JNIEnv * env, jobject obj)
+{
+
+	LOGE("Hello jni_um_vdec_render!");
+
+	um_vdec_render();
+
+	return 0;
+}
+
 
 static const char *classPathName = "com/example/mediacodecdemo/MainActivity";
 
@@ -72,6 +85,7 @@ static JNINativeMethod methods[] = {
 				{"um_vdec_decode",		"([BI)I",					(void*)jni_um_vdec_decode},
 				{"um_vdec_fini",		"()I",						(void*)jni_um_vdec_fini},
 				{"um_vdec_setVideoSurface",       "(Landroid/view/Surface;)I", (void *) jni_um_vdec_setVideoSurface},
+				{"um_vdec_render",		"()I",						(void*)jni_um_vdec_render},
 };
 
 

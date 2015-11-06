@@ -42,6 +42,8 @@ int um_vdec_decode( char* in, int len);
 
 int um_vdec_fini();
 
+int um_vdec_render();
+
 #ifdef __cplusplus
 }
 #endif

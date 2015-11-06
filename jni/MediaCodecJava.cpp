@@ -372,6 +372,7 @@ struct mc_api_sys
     int i_width;
    	int i_height;
    	int i_codec;
+   	int i;
 };
 
 struct mc_api_sys* p_sys;
@@ -1091,8 +1092,6 @@ extern "C" int um_vdec_decode(char* buffer, int len)
 	 }
 	ALOGE("Hello jni_um_vdec_decode!");
 
-	DequeueOutput(0);
-
 	int inputBufferIndex = DequeueInput(0);
 	ALOGE("Hello jni_um_vdec_decode! inputBufferIndex = %d", inputBufferIndex);
 	if(inputBufferIndex >= 0){
@@ -1104,12 +1103,18 @@ extern "C" int um_vdec_decode(char* buffer, int len)
 //		codec.queueInputBuffer(inputBufferIndex, 0, frameLen, 0, 0);
 
 		QueueInput(inputBufferIndex, buffer, len, 0, 0);
+
+//		p_sys->i++;
+//		if(p_sys->i%3 != 0)
+//			return 0;
 	}
 
 //	BufferInfo info = new BufferInfo();
 //
 //	int outputBufferIndex = codec.dequeueOutputBuffer(info, 0);
 
+
+#if 0
 	int outputBufferIndex = DequeueOutput(0);
 	ALOGE("Hello jni_um_vdec_decode! outputBufferIndex = %d", outputBufferIndex);
 	if(outputBufferIndex >= 0){
@@ -1183,6 +1188,8 @@ extern "C" int um_vdec_decode(char* buffer, int len)
 		env->DeleteLocalRef(format);
 	 }
 
+
+#endif
 	return 0;
 }
 
@@ -1206,6 +1213,7 @@ extern "C" int um_vdec_init( int codec, int width, int height)
     p_sys->i_width = width;
     p_sys->i_height = height;
     p_sys->i_codec = codec;
+    p_sys->i = 0;
 
     const char *mime = NULL;
 	size_t fmt_profile = 0;
@@ -1230,4 +1238,88 @@ extern "C" int um_vdec_fini()
 {
 	ALOGE("Hello jni_um_vdec_fini!");
 	Stop();
+}
+
+extern "C" int um_vdec_render()
+{
+
+	JNIEnv *env;
+	if (JNI_OK != SDL_JNI_SetupThreadEnv(&env)) {
+		ALOGE( "%s: SetupThreadEnv failed", __func__);
+		return -1;
+	}
+
+	ALOGE("Hello jni_um_vdec_render!");
+	int outputBufferIndex = DequeueOutput(0);
+	ALOGE("Hello jni_um_vdec_decode! outputBufferIndex = %d", outputBufferIndex);
+	if(outputBufferIndex >= 0){
+
+		ALOGE( "codec outputBufferIndex %d" , outputBufferIndex);
+		//codec.releaseOutputBuffer(outputBufferIndex, true);
+		//outputBufferIndex = codec.dequeueOutputBuffer(info, 0);
+		ReleaseOutput( outputBufferIndex, true);
+		DequeueOutput(0);
+	}else if (outputBufferIndex == MC_API_INFO_OUTPUT_BUFFERS_CHANGED) {
+
+		ALOGE( "codec INFO_OUTPUT_BUFFERS_CHANGED");
+		//outputBuffers = codec.getOutputBuffers();
+
+		 jobject joutput_buffers;
+
+		ALOGE( "output buffers changed");
+		if (!jfields.get_output_buffers)
+			return 0;
+		env->DeleteGlobalRef(p_sys->output_buffers);
+
+		joutput_buffers = env->CallObjectMethod(p_sys->codec,
+												   jfields.get_output_buffers);
+		if (CHECK_EXCEPTION())
+		{
+			ALOGE( "Exception in MediaCodec.getOutputBuffer");
+			p_sys->output_buffers = NULL;
+			return MC_API_ERROR;
+		}
+		p_sys->output_buffers = env->NewGlobalRef( joutput_buffers);
+		env->DeleteLocalRef(joutput_buffers);
+	} else if (outputBufferIndex == MC_API_INFO_OUTPUT_FORMAT_CHANGED) {
+
+		ALOGE( "codec INFO_OUTPUT_FORMAT_CHANGED");
+		// Subsequent data will conform to new format.
+		//MediaFormat format = codec.getOutputFormat();
+
+
+		jobject format = NULL;
+		jstring format_string = NULL;
+		jsize format_len;
+		const char *format_ptr;
+
+		format = env->CallObjectMethod(p_sys->codec, jfields.get_output_format);
+		if (CHECK_EXCEPTION())
+		{
+			ALOGE( "Exception in MediaCodec.getOutputFormat");
+			return MC_API_ERROR;
+		}
+
+		format_string = (jstring)env->CallObjectMethod( format, jfields.tostring);
+
+		format_len = env->GetStringUTFLength(format_string);
+		format_ptr = env->GetStringUTFChars(format_string, NULL);
+		ALOGE( "output format changed: %.*s", format_len,format_ptr);
+		env->ReleaseStringUTFChars(format_string, format_ptr);
+
+		//p_out->type = MC_OUT_TYPE_CONF;
+
+//			p_out->u.conf.video.width         = GET_INTEGER(format, "width");
+//			p_out->u.conf.video.height        = GET_INTEGER(format, "height");
+//			p_out->u.conf.video.stride        = GET_INTEGER(format, "stride");
+//			p_out->u.conf.video.slice_height  = GET_INTEGER(format, "slice-height");
+//			p_out->u.conf.video.pixel_format  = GET_INTEGER(format, "color-format");
+//			p_out->u.conf.video.crop_left     = GET_INTEGER(format, "crop-left");
+//			p_out->u.conf.video.crop_top      = GET_INTEGER(format, "crop-top");
+//			p_out->u.conf.video.crop_right    = GET_INTEGER(format, "crop-right");
+//			p_out->u.conf.video.crop_bottom   = GET_INTEGER(format, "crop-bottom");
+
+
+		env->DeleteLocalRef(format);
+	 }
 }

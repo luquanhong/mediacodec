@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 
+
 //import android.support.v7.app.ActionBarActivity;
 //import android.support.v4.app.Fragment;
 import android.app.Activity;
@@ -44,6 +45,8 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 	
 	private PlayerThread mPlayerThread = null;
 	
+	private Thread renderThread = null;
+	
 	
 	private boolean isSDK = false;
 	ByteBuffer[] inputBuffers;
@@ -59,6 +62,8 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 	public native int um_vdec_setSurface();
 	
 	public native int um_vdec_setVideoSurface(Surface surface);
+	
+	public native int um_vdec_render();
 	
 	static {
 		System.loadLibrary("mediacodec");
@@ -82,11 +87,9 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 			@Override
 			public void onClick(View v) {
 				// TODO Auto-generated method stub
-				if(mPlayerThread.getState() == Thread.State.NEW){//if (thread.getState() == Thread.State.NEW)
-					mPlayerThread.start();
-				} else {
-					mPlayerThread.run();
-				}
+				
+				mPlayerThread.start();
+				renderThread.start();
 				
 			}
 
@@ -116,6 +119,21 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 	}
 
 	
+	private Runnable renderRunnable = new Runnable() {
+	    public void run() {
+	    	
+	    	while(true){
+//	    		try {
+//					Thread.sleep(10);
+//				} catch (InterruptedException e) {
+//					// TODO Auto-generated catch block
+//					e.printStackTrace();
+//				}
+	    		um_vdec_render();
+	    	}
+	    }
+	};
+	
 
 	@Override
 	public void surfaceCreated(SurfaceHolder holder) {
@@ -135,6 +153,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 		um_vdec_setVideoSurface(mSurface);
 		mPlayerThread = new PlayerThread( mSurface);
 		
+		renderThread = new Thread(renderRunnable);
 		
 	}
 
@@ -155,6 +174,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 
 		return iCount;
 	}
+	
 	
 	
 	class PlayerThread extends Thread{
